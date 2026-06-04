@@ -21,6 +21,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QItemSelectionModel>
+#include <QObject>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -44,6 +45,61 @@ void showSimpleMessage(QWidget *parent, QMessageBox::Icon icon, const QString &t
     message.setText(text);
     message.addButton("Гаразд", QMessageBox::AcceptRole);
     message.exec();
+}
+
+bool runTripDialog(QWidget *parent, const QString &windowTitle, Trip &trip)
+{
+    QDialog dialog(parent);
+    dialog.setWindowTitle(windowTitle);
+    dialog.resize(420, 220);
+
+    auto *titleEdit = new QLineEdit(&dialog);
+    titleEdit->setText(trip.title);
+
+    auto *destinationEdit = new QLineEdit(&dialog);
+    destinationEdit->setText(trip.destination);
+
+    auto *startDateEdit = new QDateEdit(trip.startDate.isValid() ? trip.startDate : QDate::currentDate(), &dialog);
+    auto *endDateEdit = new QDateEdit(trip.endDate.isValid() ? trip.endDate : QDate::currentDate().addDays(7), &dialog);
+    startDateEdit->setCalendarPopup(true);
+    endDateEdit->setCalendarPopup(true);
+
+    auto *form = new QFormLayout;
+    form->addRow("Назва", titleEdit);
+    form->addRow("Місце призначення", destinationEdit);
+    form->addRow("Дата початку", startDateEdit);
+    form->addRow("Дата завершення", endDateEdit);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Save)->setText("Зберегти");
+    buttons->button(QDialogButtonBox::Cancel)->setText("Скасувати");
+
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->addLayout(form);
+    layout->addWidget(buttons);
+
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        if (titleEdit->text().trimmed().isEmpty()) {
+            showSimpleMessage(&dialog, QMessageBox::Warning, "Вкажіть назву подорожі.");
+            return;
+        }
+        if (startDateEdit->date() > endDateEdit->date()) {
+            showSimpleMessage(&dialog, QMessageBox::Warning, "Дата початку не може бути пізніше дати завершення.");
+            return;
+        }
+        dialog.accept();
+    });
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return false;
+    }
+
+    trip.title = titleEdit->text().trimmed();
+    trip.destination = destinationEdit->text().trimmed();
+    trip.startDate = startDateEdit->date();
+    trip.endDate = endDateEdit->date();
+    return true;
 }
 }
 
@@ -337,50 +393,15 @@ bool MainWindow::saveData()
 
 void MainWindow::createTrip()
 {
-    QDialog dialog(this);
-    dialog.setWindowTitle("Створити подорож");
-    dialog.resize(420, 220);
-
-    auto *titleEdit = new QLineEdit(&dialog);
-    auto *destinationEdit = new QLineEdit(&dialog);
-    auto *startDateEdit = new QDateEdit(QDate::currentDate(), &dialog);
-    auto *endDateEdit = new QDateEdit(QDate::currentDate().addDays(7), &dialog);
-    startDateEdit->setCalendarPopup(true);
-    endDateEdit->setCalendarPopup(true);
-
-    auto *form = new QFormLayout;
-    form->addRow("Назва", titleEdit);
-    form->addRow("Місце призначення", destinationEdit);
-    form->addRow("Дата початку", startDateEdit);
-    form->addRow("Дата завершення", endDateEdit);
-
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Save)->setText("Зберегти");
-    buttons->button(QDialogButtonBox::Cancel)->setText("Скасувати");
-    auto *layout = new QVBoxLayout(&dialog);
-    layout->addLayout(form);
-    layout->addWidget(buttons);
-
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
-        if (titleEdit->text().trimmed().isEmpty()) {
-            showSimpleMessage(&dialog, QMessageBox::Warning, "Вкажіть назву подорожі.");
-            return;
-        }
-        dialog.accept();
-    });
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
     Trip trip;
     trip.id = createId();
-    trip.title = titleEdit->text().trimmed();
-    trip.destination = destinationEdit->text().trimmed();
-    trip.startDate = startDateEdit->date();
-    trip.endDate = endDateEdit->date();
+    trip.startDate = QDate::currentDate();
+    trip.endDate = QDate::currentDate().addDays(7);
     trip.createdAt = QDateTime::currentDateTime();
+
+    if (!runTripDialog(this, "Створити подорож", trip)) {
+        return;
+    }
 
     trips.append(trip);
     state.selectedTripId = trip.id;
@@ -397,52 +418,9 @@ void MainWindow::editTrip()
         return;
     }
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Редагувати подорож");
-    dialog.resize(420, 220);
-
-    auto *titleEdit = new QLineEdit(&dialog);
-    titleEdit->setText(trip->title);
-
-    auto *destinationEdit = new QLineEdit(&dialog);
-    destinationEdit->setText(trip->destination);
-
-    auto *startDateEdit = new QDateEdit(trip->startDate.isValid() ? trip->startDate : QDate::currentDate(), &dialog);
-    auto *endDateEdit = new QDateEdit(trip->endDate.isValid() ? trip->endDate : QDate::currentDate().addDays(7), &dialog);
-    startDateEdit->setCalendarPopup(true);
-    endDateEdit->setCalendarPopup(true);
-
-    auto *form = new QFormLayout;
-    form->addRow("Назва", titleEdit);
-    form->addRow("Місце призначення", destinationEdit);
-    form->addRow("Дата початку", startDateEdit);
-    form->addRow("Дата завершення", endDateEdit);
-
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Save)->setText("Зберегти");
-    buttons->button(QDialogButtonBox::Cancel)->setText("Скасувати");
-
-    auto *layout = new QVBoxLayout(&dialog);
-    layout->addLayout(form);
-    layout->addWidget(buttons);
-
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
-        if (titleEdit->text().trimmed().isEmpty()) {
-            showSimpleMessage(&dialog, QMessageBox::Warning, "Вкажіть назву подорожі.");
-            return;
-        }
-        dialog.accept();
-    });
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    if (dialog.exec() != QDialog::Accepted) {
+    if (!runTripDialog(this, "Редагувати подорож", *trip)) {
         return;
     }
-
-    trip->title = titleEdit->text().trimmed();
-    trip->destination = destinationEdit->text().trimmed();
-    trip->startDate = startDateEdit->date();
-    trip->endDate = endDateEdit->date();
 
     setDirty(true);
     refreshAll();
