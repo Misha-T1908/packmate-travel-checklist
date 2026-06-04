@@ -1,0 +1,9 @@
+build/
+.qtcreator/
+*.user
+*.autosave
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.exe
