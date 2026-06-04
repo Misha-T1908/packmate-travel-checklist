@@ -1,27 +1,55 @@
 #include "Storage.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 
 QString Storage::dataFilePath()
 {
     return QCoreApplication::applicationDirPath() + "/data/packing_data.json";
 }
 
-PersistedData Storage::load()
+PersistedData Storage::load(QString *errorMessage)
 {
     PersistedData data;
 
     QFile file(dataFilePath());
-    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
+    if (!file.exists()) {
+        qInfo() << "Data file not found, starting first launch:" << dataFilePath();
         return data;
     }
 
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        qWarning() << "Failed to open data file:" << dataFilePath() << file.errorString();
+        return data;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        if (errorMessage) {
+            *errorMessage = parseError.errorString();
+        }
+        qWarning() << "Malformed JSON data file:" << dataFilePath() << parseError.errorString();
+        return data;
+    }
+
+    if (!document.isObject()) {
+        if (errorMessage) {
+            *errorMessage = "JSON root is not an object.";
+        }
+        qWarning() << "Invalid JSON data file root:" << dataFilePath();
+        return data;
+    }
+
     const QJsonObject root = document.object();
 
     const QJsonArray trips = root["trips"].toArray();
@@ -40,6 +68,7 @@ PersistedData Storage::load()
     data.state.activeCategoryFilter = state["activeCategoryFilter"].toString("Усі");
     data.state.hasUnsavedChanges = false;
 
+    qInfo() << "Loaded app data:" << data.trips.size() << "trips," << data.items.size() << "items";
     return data;
 }
 
@@ -50,6 +79,7 @@ bool Storage::save(const PersistedData &data, QString *errorMessage)
         if (errorMessage) {
             *errorMessage = "не вдалося створити папку data.";
         }
+        qWarning() << "Failed to create data directory:" << dir.absoluteFilePath("data");
         return false;
     }
 
@@ -78,9 +108,21 @@ bool Storage::save(const PersistedData &data, QString *errorMessage)
         if (errorMessage) {
             *errorMessage = file.errorString();
         }
+        qWarning() << "Failed to open data file for writing:" << dataFilePath() << file.errorString();
         return false;
     }
 
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    const QByteArray json = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    const qint64 written = file.write(json);
+    if (written != json.size()) {
+        if (errorMessage) {
+            const QString writeError = file.errorString();
+            *errorMessage = writeError.isEmpty() ? QString("не вдалося повністю записати файл.") : writeError;
+        }
+        qWarning() << "Failed to write complete data file:" << dataFilePath() << "written" << written << "expected" << json.size();
+        return false;
+    }
+
+    qInfo() << "Saved app data:" << data.trips.size() << "trips," << data.items.size() << "items";
     return true;
 }

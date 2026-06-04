@@ -9,6 +9,7 @@
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDateEdit>
+#include <QDebug>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFont>
@@ -353,10 +354,17 @@ void MainWindow::createMenus()
 
 void MainWindow::loadData()
 {
-    const PersistedData data = Storage::load();
+    QString error;
+    const PersistedData data = Storage::load(&error);
+    if (!error.isEmpty()) {
+        qWarning() << "App data load warning:" << error;
+        showSimpleMessage(this, QMessageBox::Warning, "Не вдалося завантажити дані: " + error);
+    }
+
     trips = data.trips;
     items = data.items;
     state = data.state;
+    qInfo() << "App data load finished";
 
     if (trips.isEmpty()) {
         state.selectedTripId.clear();
@@ -382,10 +390,12 @@ bool MainWindow::saveData()
 
     QString error;
     if (!Storage::save(data, &error)) {
+        qWarning() << "App data save failed:" << error;
         showSimpleMessage(this, QMessageBox::Warning, "Не вдалося зберегти дані: " + error);
         return false;
     }
 
+    qInfo() << "App data save finished";
     setDirty(false);
     statusBar()->showMessage("Збережено у " + Storage::dataFilePath(), 4000);
     return true;
@@ -406,6 +416,7 @@ void MainWindow::createTrip()
     trips.append(trip);
     state.selectedTripId = trip.id;
     state.selectedItemId.clear();
+    qInfo() << "Trip created:" << trip.id << trip.title;
     setDirty(true);
     refreshAll();
 }
@@ -422,6 +433,7 @@ void MainWindow::editTrip()
         return;
     }
 
+    qInfo() << "Trip edited:" << trip->id << trip->title;
     setDirty(true);
     refreshAll();
 }
@@ -447,6 +459,7 @@ void MainWindow::addItem()
 
     items.append(dialog.item());
     state.selectedItemId = items.last().id;
+    qInfo() << "Item added:" << items.last().id << items.last().name;
     setDirty(true);
     refreshAll();
 }
@@ -466,6 +479,7 @@ void MainWindow::editSelectedItem()
     }
 
     *item = dialog.item();
+    qInfo() << "Item edited:" << item->id << item->name;
     setDirty(true);
     refreshAll();
 }
@@ -478,6 +492,7 @@ void MainWindow::deleteSelectedItem()
     }
 
     const QString itemId = item->id;
+    const QString itemName = item->name;
     QMessageBox message(this);
     message.setWindowTitle("PackMate");
     message.setIcon(QMessageBox::Question);
@@ -500,6 +515,7 @@ void MainWindow::deleteSelectedItem()
     }
 
     state.selectedItemId.clear();
+    qInfo() << "Item deleted:" << itemId << itemName;
     setDirty(true);
     refreshAll();
 }
@@ -512,6 +528,7 @@ void MainWindow::toggleSelectedPacked()
     }
 
     item->isPacked = !item->isPacked;
+    qInfo() << (item->isPacked ? "Item packed:" : "Item unpacked:") << item->id << item->name;
     setDirty(true);
     refreshAll();
 }

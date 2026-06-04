@@ -14,6 +14,6 @@ class Storage
 {
 public:
     static QString dataFilePath();
-    static PersistedData load();
+    static PersistedData load(QString *errorMessage = nullptr);
     static bool save(const PersistedData &data, QString *errorMessage = nullptr);
 };
